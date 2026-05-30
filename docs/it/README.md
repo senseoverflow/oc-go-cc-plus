@@ -53,11 +53,9 @@ oc-go-cc-plus doctor
 oc-go-cc-plus serve
 ```
 
-In un altro terminale:
+In un altro terminale, configura Claude Code come descritto in [Configurazione Claude Code](#configurazione-claude-code) e avvia:
 
 ```bash
-export ANTHROPIC_BASE_URL=http://127.0.0.1:3456
-export ANTHROPIC_AUTH_TOKEN=unused
 claude
 ```
 
@@ -134,29 +132,131 @@ Variabili d'ambiente (con fallback a `OC_GO_CC_*` per compatibilità):
 | `OC_GO_CC_PLUS_PORT` | Porta proxy |
 | `OC_GO_CC_PLUS_HOST` | Host proxy |
 
-## Forzare un modello in Claude Code
+## Configurazione Claude Code
 
-### Discovery automatica (`/model`)
+Dopo aver avviato il proxy (`oc-go-cc-plus serve`), Claude Code deve puntare al proxy locale invece che all'API Anthropic. Senza queste modifiche vedrai la schermata di login Anthropic o modelli tipo "Sonnet 4.5 · API Usage Billing".
 
-Il proxy espone `GET /v1/models` in formato Anthropic. Con:
+### 1. Variabili d'ambiente (shell)
+
+Aggiungi al tuo `~/.zshrc` (o `~/.bashrc`):
 
 ```bash
+# Proxy oc-go-cc-plus
+export ANTHROPIC_BASE_URL=http://127.0.0.1:3456
+export ANTHROPIC_AUTH_TOKEN=unused
+
+# Modello predefinito
+export ANTHROPIC_MODEL=deepseek-v4-pro
+
+# Alias tier → modelli OpenCode Go (per /model sonnet|opus|haiku)
+export ANTHROPIC_DEFAULT_SONNET_MODEL=deepseek-v4-pro
+export ANTHROPIC_DEFAULT_OPUS_MODEL=glm-5.1
+export ANTHROPIC_DEFAULT_HAIKU_MODEL=deepseek-v4-flash
+export ANTHROPIC_DEFAULT_SONNET_MODEL_NAME="DeepSeek V4 Pro"
+export ANTHROPIC_DEFAULT_OPUS_MODEL_NAME="GLM-5.1"
+export ANTHROPIC_DEFAULT_HAIKU_MODEL_NAME="DeepSeek V4 Flash"
+
+# Subagenti / task paralleli
+export CLAUDE_CODE_SUBAGENT_MODEL=deepseek-v4-flash
+
+# Popola /model con i modelli del proxy (Claude Code ≥ 2.1.129)
 export CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY=1
+
+# Voce extra opzionale nel picker
+export ANTHROPIC_CUSTOM_MODEL_OPTION=kimi-k2.6
+export ANTHROPIC_CUSTOM_MODEL_OPTION_NAME="Kimi K2.6"
 ```
 
-Claude Code (≥ 2.1.129) interroga il proxy all'avvio e aggiunge al picker `/model` i modelli configurati, etichettati **From gateway**.
+Poi ricarica la shell: `source ~/.zshrc`.
 
-Gli ID esposti usano il prefisso `anthropic-opencode-` (richiesto dal filtro di Claude Code). Esempio: `anthropic-opencode-deepseek-v4-pro`. Il proxy traduce automaticamente verso l'ID OpenCode Go reale.
+### 2. Settings di Claude Code (consigliato)
 
-### Alias tier (`/model sonnet|opus|haiku`)
+Crea o aggiorna `~/.claude/settings.json` così le variabili valgono anche fuori dalla shell (es. app avviata dal launcher):
 
-Con `respect_requested_model: true` (default nei preset):
+```json
+{
+  "model": "deepseek-v4-pro",
+  "env": {
+    "ANTHROPIC_BASE_URL": "http://127.0.0.1:3456",
+    "ANTHROPIC_AUTH_TOKEN": "unused",
+    "ANTHROPIC_DEFAULT_SONNET_MODEL": "deepseek-v4-pro",
+    "ANTHROPIC_DEFAULT_OPUS_MODEL": "glm-5.1",
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL": "deepseek-v4-flash",
+    "ANTHROPIC_DEFAULT_SONNET_MODEL_NAME": "DeepSeek V4 Pro",
+    "ANTHROPIC_DEFAULT_OPUS_MODEL_NAME": "GLM-5.1",
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL_NAME": "DeepSeek V4 Flash",
+    "CLAUDE_CODE_SUBAGENT_MODEL": "deepseek-v4-flash",
+    "CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY": "1"
+  }
+}
+```
+
+Riavvia Claude Code dopo ogni modifica a `settings.json`.
+
+### 3. Config del proxy (oc-go-cc-plus)
+
+In `~/.config/oc-go-cc-plus/config.json` assicurati che sia attivo:
+
+```json
+{
+  "respect_requested_model": true,
+  "hot_reload": true
+}
+```
+
+- **`respect_requested_model`** — Claude Code può forzare un modello con `/model` o `--model`
+- **`hot_reload`** — ricarica il config senza riavviare il proxy
+
+### 4. Selezionare un modello
+
+| Metodo | Esempio | Note |
+|---|---|---|
+| Picker `/model` | `/model` → scegli **From gateway** | Richiede `CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY=1` |
+| Alias tier | `/model sonnet`, `/model opus`, `/model haiku` | Mappati dalle variabili `ANTHROPIC_DEFAULT_*_MODEL` |
+| ID diretto | `/model deepseek-v4-pro` | Con `respect_requested_model: true` |
+| ID gateway | `/model anthropic-opencode-deepseek-v4-pro` | ID esposto da `GET /v1/models`; il proxy traduce automaticamente |
+| Avvio CLI | `claude --model qwen3.7-max` | Solo per quella sessione |
+
+Nel picker: **`s`** = solo sessione corrente, **`Enter`** = default permanente.
+
+### 5. Discovery automatica modelli (`/v1/models`)
+
+Il proxy espone `GET http://127.0.0.1:3456/v1/models` in formato Anthropic. Con `CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY=1`, all'avvio Claude Code interroga questo endpoint e aggiunge al picker i modelli presenti nel tuo `config.json`, etichettati **From gateway**.
+
+Gli ID usano il prefisso `anthropic-opencode-` (richiesto dal filtro interno di Claude Code). Esempio:
+
+```
+anthropic-opencode-deepseek-v4-pro  →  deepseek-v4-pro (upstream)
+```
+
+Verifica che l'endpoint risponda:
 
 ```bash
-claude --model deepseek-v4-pro
-claude --model qwen3.7-max
-claude --model minimax-m2.7
+curl -s http://127.0.0.1:3456/v1/models | head
 ```
+
+### 6. Comandi slash opzionali (locale)
+
+Puoi aggiungere comandi personalizzati in `~/.claude/commands/og/` (non inclusi nel repo). Esempio `~/.claude/commands/og/deepseek.md`:
+
+```markdown
+---
+description: OpenCode Go — DeepSeek V4 Pro
+model: deepseek-v4-pro
+---
+
+$ARGUMENTS
+```
+
+Diventa `/og:deepseek` e usa quel modello solo per quella invocazione.
+
+### Checklist rapida
+
+1. `oc-go-cc-plus serve` in esecuzione
+2. `ANTHROPIC_BASE_URL=http://127.0.0.1:3456` nella shell o in `settings.json`
+3. `respect_requested_model: true` nel config del proxy
+4. (Opzionale) `CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY=1` per il picker completo
+5. Riavvia Claude Code
 
 ## Validazione e diagnostica
 
@@ -209,6 +309,18 @@ oc-go-cc-plus models     # tabella modelli
 oc-go-cc-plus sync-models
 kill -HUP $(cat ~/.config/oc-go-cc-plus/oc-go-cc-plus.pid)  # se hot_reload attivo
 ```
+
+### Claude Code mostra login Anthropic o modelli sbagliati
+
+- Verifica `echo $ANTHROPIC_BASE_URL` → deve essere `http://127.0.0.1:3456`
+- Controlla che il proxy sia attivo: `oc-go-cc-plus status`
+- Se usi il launcher macOS, imposta le variabili in `~/.claude/settings.json` (non basta solo `.zshrc`)
+
+### `/model` non mostra modelli OpenCode Go
+
+- Abilita `CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY=1`
+- Verifica `curl http://127.0.0.1:3456/v1/models`
+- Riavvia Claude Code (la cache è in `~/.claude/cache/gateway-models.json`)
 
 ## Licenza
 
