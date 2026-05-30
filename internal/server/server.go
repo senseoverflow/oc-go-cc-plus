@@ -71,14 +71,15 @@ func NewServer(atomic *config.AtomicConfig) (*Server, error) {
 	mux.HandleFunc("/v1/models", modelsHandler.HandleModels)
 	mux.HandleFunc("/health", healthHandler.HandleHealth)
 
-	// Create HTTP server.
+	// SSE streams can run for many minutes; do not cap WriteTimeout globally.
 	addr := fmt.Sprintf("%s:%d", cfg.Host, cfg.Port)
 	httpSrv := &http.Server{
-		Addr:         addr,
-		Handler:      mux,
-		ReadTimeout:  30 * time.Second,
-		WriteTimeout: 5 * time.Minute,
-		IdleTimeout:  120 * time.Second,
+		Addr:              addr,
+		Handler:           mux,
+		ReadHeaderTimeout: 30 * time.Second,
+		ReadTimeout:       2 * time.Minute,
+		WriteTimeout:      0,
+		IdleTimeout:       5 * time.Minute,
 	}
 
 	srv := &Server{

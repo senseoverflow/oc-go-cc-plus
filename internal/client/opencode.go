@@ -23,28 +23,35 @@ type OpenCodeClient struct {
 
 // NewOpenCodeClient creates a new OpenCode Go client.
 func NewOpenCodeClient(atomic *config.AtomicConfig) *OpenCodeClient {
-	cfg := atomic.Get()
-	timeout := time.Duration(cfg.OpenCodeGo.TimeoutMs) * time.Millisecond
-	if timeout == 0 {
-		timeout = 5 * time.Minute
-	}
-
-	// Configure connection pooling for better performance
+	// Configure connection pooling for better performance.
+	// Client.Timeout must stay 0 so long-lived SSE streams are not cut off;
+	// per-request deadlines are enforced via context in callers.
 	transport := &http.Transport{
-		MaxIdleConns:        100,
-		MaxIdleConnsPerHost: 20,
-		IdleConnTimeout:     90 * time.Second,
-		MaxConnsPerHost:     50,
-		DisableKeepAlives:   false,
+		MaxIdleConns:          100,
+		MaxIdleConnsPerHost:   20,
+		IdleConnTimeout:       90 * time.Second,
+		MaxConnsPerHost:       50,
+		DisableKeepAlives:     false,
+		ResponseHeaderTimeout: 120 * time.Second,
 	}
 
 	return &OpenCodeClient{
 		atomic: atomic,
 		httpClient: &http.Client{
-			Timeout:   timeout,
+			Timeout:   0,
 			Transport: transport,
 		},
 	}
+}
+
+// UpstreamTimeout returns the configured upstream request timeout.
+func (c *OpenCodeClient) UpstreamTimeout() time.Duration {
+	cfg := c.atomic.Get()
+	timeout := time.Duration(cfg.OpenCodeGo.TimeoutMs) * time.Millisecond
+	if timeout == 0 {
+		timeout = 5 * time.Minute
+	}
+	return timeout
 }
 
 // IsAnthropicModel returns true if the model requires the Anthropic endpoint.

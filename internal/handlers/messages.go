@@ -289,7 +289,7 @@ func (h *MessagesHandler) handleStreaming(
 
 		// Create a fresh context with timeout for THIS attempt only.
 		// Don't use r.Context() directly - it gets canceled when Claude Code retries.
-		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+		ctx, cancel := context.WithTimeout(context.Background(), h.client.UpstreamTimeout())
 
 		// Check if this is an Anthropic-native model (MiniMax)
 		if client.IsAnthropicModel(model.ModelID) {
@@ -298,13 +298,13 @@ func (h *MessagesHandler) handleStreaming(
 			modelBody := replaceModelInRawBody(rawBody, model.ModelID)
 			if err := h.handleAnthropicStreaming(ctx, rw, modelBody, model.ModelID); err != nil {
 				cancel()
-				// Check if this was a client disconnect
 				if clientCtx.Err() == context.Canceled {
 					h.logger.Info("client disconnected during anthropic stream")
 					return
 				}
 				h.logger.Warn("anthropic streaming failed", "model", model.ModelID, "error", err)
-				continue
+				h.sendStreamError(rw, fmt.Sprintf("anthropic streaming failed: %v", err))
+				return
 			}
 			cancel()
 			latency := time.Since(streamStart)
@@ -342,13 +342,13 @@ func (h *MessagesHandler) handleStreaming(
 				h.logger.Info("client disconnected during stream")
 				return
 			}
-			// Check if this was a client disconnect
 			if clientCtx.Err() == context.Canceled {
 				h.logger.Info("client disconnected during stream (context canceled)")
 				return
 			}
 			h.logger.Warn("stream proxy failed", "model", model.ModelID, "error", err)
-			continue
+			h.sendStreamError(rw, fmt.Sprintf("stream failed: %v", err))
+			return
 		}
 
 		_ = streamBody.Close()
@@ -447,6 +447,7 @@ func (h *MessagesHandler) sendStreamError(w http.ResponseWriter, message string)
 
 	data, _ := json.Marshal(errorEvent)
 	_, _ = fmt.Fprintf(w, "event: error\ndata: %s\n\n", string(data))
+	_, _ = fmt.Fprintf(w, "event: message_stop\ndata: {}\n\n")
 
 	if f, ok := w.(http.Flusher); ok {
 		f.Flush()
