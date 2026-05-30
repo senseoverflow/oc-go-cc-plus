@@ -16,7 +16,7 @@ Fork potenziato di [oc-go-cc](https://github.com/samueltuyizere/oc-go-cc) (AGPL-
 ### Homebrew (consigliato)
 
 ```bash
-brew tap gabrielecipolloni/tap
+brew tap senseoverflow/tap
 brew install oc-go-cc-plus
 ```
 
