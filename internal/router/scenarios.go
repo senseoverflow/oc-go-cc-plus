@@ -48,7 +48,7 @@ func DetectScenario(messages []MessageContent, tokenCount int, cfg *config.Confi
 		return ScenarioResult{
 			Scenario:   ScenarioLongContext,
 			TokenCount: tokenCount,
-			Reason:     fmt.Sprintf("token count %d exceeds threshold %d (use MiniMax for 1M context)", tokenCount, threshold),
+			Reason:     fmt.Sprintf("token count %d exceeds threshold %d (use long_context model)", tokenCount, threshold),
 		}
 	}
 
@@ -180,7 +180,7 @@ func hasBackgroundPattern(messages []MessageContent) bool {
 }
 
 // getLongContextThreshold returns the configured threshold or a sensible default.
-// Default is 100K tokens to trigger long-context models (1M context) vs regular models (128-256K).
+// Default is 80K tokens to trigger the long_context model (e.g. deepseek-v4-pro with ~1M context).
 func getLongContextThreshold(cfg *config.Config) int {
 	if cfg == nil {
 		return 100000 // Default: 100K tokens

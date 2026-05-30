@@ -62,8 +62,8 @@
       { "provider": "opencode-go", "model_id": "qwen3.7-max" }
     ],
     "long_context": [
-      { "provider": "opencode-go", "model_id": "minimax-m2.7" },
-      { "provider": "opencode-go", "model_id": "minimax-m2.5" }
+      { "provider": "opencode-go", "model_id": "kimi-k2.6" },
+      { "provider": "opencode-go", "model_id": "glm-5" }
     ],
     "think": [
       { "provider": "opencode-go", "model_id": "glm-5" },

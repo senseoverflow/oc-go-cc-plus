@@ -54,6 +54,36 @@ func (c *OpenCodeClient) UpstreamTimeout() time.Duration {
 	return timeout
 }
 
+// StreamingTimeout returns a deadline for upstream SSE reads.
+// Large prompts can spend several minutes in prefill before the first token arrives.
+func (c *OpenCodeClient) StreamingTimeout(tokenCount int) time.Duration {
+	base := c.UpstreamTimeout()
+	cfg := c.atomic.Get()
+	threshold := getLongContextThreshold(cfg)
+	if tokenCount <= threshold {
+		return base
+	}
+
+	scaled := time.Duration(tokenCount/200) * time.Second
+	if minLarge := 15 * time.Minute; scaled < minLarge {
+		scaled = minLarge
+	}
+	if base > scaled {
+		return base
+	}
+	return scaled
+}
+
+func getLongContextThreshold(cfg *config.Config) int {
+	if cfg == nil {
+		return 100000
+	}
+	if lc, ok := cfg.Models["long_context"]; ok && lc.ContextThreshold > 0 {
+		return lc.ContextThreshold
+	}
+	return 100000
+}
+
 // IsAnthropicModel returns true if the model requires the Anthropic endpoint.
 func IsAnthropicModel(modelID string) bool {
 	return models.UsesAnthropicEndpoint(modelID)

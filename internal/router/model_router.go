@@ -29,8 +29,13 @@ type RouteResult struct {
 // resolveRequestedModel checks if the user-specified model should override
 // scenario-based routing. Returns the route result and true if it matched,
 // or zero value and false if scenario routing should proceed normally.
-func (r *ModelRouter) resolveRequestedModel(cfg *config.Config, requestedModel string) (RouteResult, bool) {
+// Long-context requests always use scenario routing regardless of the requested model.
+func (r *ModelRouter) resolveRequestedModel(cfg *config.Config, requestedModel string, tokenCount int) (RouteResult, bool) {
 	if !cfg.RespectRequestedModel || requestedModel == "" {
+		return RouteResult{}, false
+	}
+
+	if tokenCount > getLongContextThreshold(cfg) {
 		return RouteResult{}, false
 	}
 
@@ -66,7 +71,7 @@ func (r *ModelRouter) resolveRequestedModel(cfg *config.Config, requestedModel s
 func (r *ModelRouter) Route(messages []MessageContent, tokenCount int, requestedModel string) (RouteResult, error) {
 	cfg := r.atomic.Get()
 
-	if result, ok := r.resolveRequestedModel(cfg, requestedModel); ok {
+	if result, ok := r.resolveRequestedModel(cfg, requestedModel, tokenCount); ok {
 		return result, nil
 	}
 
@@ -116,7 +121,7 @@ func (rr *RouteResult) GetModelChain() []config.ModelConfig {
 func (r *ModelRouter) RouteForStreaming(messages []MessageContent, tokenCount int, requestedModel string) RouteResult {
 	cfg := r.atomic.Get()
 
-	if result, ok := r.resolveRequestedModel(cfg, requestedModel); ok {
+	if result, ok := r.resolveRequestedModel(cfg, requestedModel, tokenCount); ok {
 		return result
 	}
 

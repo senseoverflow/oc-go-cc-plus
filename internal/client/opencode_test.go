@@ -1,6 +1,32 @@
 package client
 
-import "testing"
+import (
+	"testing"
+	"time"
+
+	"oc-go-cc-plus/internal/config"
+)
+
+func newTestAtomicConfig(cfg *config.Config) *config.AtomicConfig {
+	return config.NewAtomicConfig(cfg, "/tmp/test-config.json")
+}
+
+func TestStreamingTimeout_ScalesForLargePrompts(t *testing.T) {
+	cfg := &config.Config{
+		OpenCodeGo: config.OpenCodeGoConfig{TimeoutMs: 300000},
+		Models: map[string]config.ModelConfig{
+			"long_context": {ContextThreshold: 80000},
+		},
+	}
+	client := NewOpenCodeClient(newTestAtomicConfig(cfg))
+
+	if got := client.StreamingTimeout(1000); got != 5*time.Minute {
+		t.Fatalf("StreamingTimeout(1000) = %v, want 5m", got)
+	}
+	if got := client.StreamingTimeout(85440); got != 15*time.Minute {
+		t.Fatalf("StreamingTimeout(85440) = %v, want 15m", got)
+	}
+}
 
 func TestIsAnthropicModelOnlyRoutesNativeAnthropicModels(t *testing.T) {
 	tests := []struct {

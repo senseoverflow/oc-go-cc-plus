@@ -113,7 +113,7 @@ The proxy automatically detects the type of request and routes to the appropriat
 
 | Scenario         | Trigger                                             | Model        | Why                                             |
 | ---------------- | --------------------------------------------------- | ------------ | ----------------------------------------------- |
-| **Long Context** | >80K tokens (configurable)                          | MiniMax M2.7 | 1M context window vs 128-256K for others        |
+| **Long Context** | >80K tokens (configurable)                          | deepseek-v4-pro | ~1M context window                              |
 | **Complex**      | "architect", "refactor", "complex" in system prompt | GLM-5.1      | Best reasoning & architectural understanding    |
 | **Think**        | "think", "plan", "reason" in system prompt          | GLM-5        | Good reasoning, cheaper than GLM-5.1            |
 | **Background**   | "read file", "grep", "list directory"               | Qwen3.5 Plus | Cheapest (~10K req/5hr), perfect for simple ops |
@@ -129,7 +129,7 @@ DeepSeek V4 users can set any scenario model to `deepseek-v4-pro` or `deepseek-v
 | ---------------- | ---------------------------------------------------------------------------- | --------------------- | -------------- |
 | **Default**      | Standard chat                                                                | `models.default`      | `kimi-k2.6`    |
 | **Think**        | System prompt contains "think", "plan", "reason"; or thinking content blocks | `models.think`        | `glm-5.1`      |
-| **Long Context** | Token count exceeds `context_threshold`                                      | `models.long_context` | `minimax-m2.7` |
+| **Long Context** | Token count exceeds `context_threshold`                                      | `models.long_context` | `deepseek-v4-pro` |
 | **Background**   | File read, directory list, grep patterns                                     | `models.background`   | `qwen3.5-plus` |
 
 Routing priority: **Long Context** > **Think** > **Background** > **Default**

@@ -221,7 +221,7 @@ func TestResolveRequestedModel_UsesFallbacks(t *testing.T) {
 
 	router := NewModelRouter(newTestAtomicConfig(cfg))
 
-	result, ok := router.resolveRequestedModel(cfg, "kimi-k2.6")
+	result, ok := router.resolveRequestedModel(cfg, "kimi-k2.6", 100)
 	if !ok {
 		t.Fatal("expected resolveRequestedModel to match")
 	}
@@ -230,6 +230,35 @@ func TestResolveRequestedModel_UsesFallbacks(t *testing.T) {
 	}
 	if result.Fallbacks[0].ModelID != "qwen3.5-plus" {
 		t.Errorf("expected first fallback qwen3.5-plus, got %s", result.Fallbacks[0].ModelID)
+	}
+}
+
+func TestRoute_RespectRequestedModel_LongContextOverridesRequestedModel(t *testing.T) {
+	cfg := &config.Config{
+		RespectRequestedModel: true,
+		Models: map[string]config.ModelConfig{
+			"default":      {ModelID: "deepseek-v4-pro"},
+			"long_context": {ModelID: "deepseek-v4-pro", ContextThreshold: 80000},
+			"deepseek-v4-pro": {
+				Provider: "opencode-go",
+				ModelID:  "deepseek-v4-pro",
+			},
+		},
+		Fallbacks: map[string][]config.ModelConfig{
+			"long_context": {{ModelID: "kimi-k2.6"}},
+		},
+	}
+
+	router := NewModelRouter(newTestAtomicConfig(cfg))
+	result, err := router.Route(nil, 85440, "deepseek-v4-pro")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.Scenario != ScenarioLongContext {
+		t.Fatalf("expected long_context scenario, got %s", result.Scenario)
+	}
+	if result.Primary.ModelID != "deepseek-v4-pro" {
+		t.Fatalf("expected deepseek-v4-pro, got %s", result.Primary.ModelID)
 	}
 }
 
