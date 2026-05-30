@@ -82,8 +82,8 @@ func NewMessagesHandler(
 		streamHandler:       transformer.NewStreamHandler(),
 		tokenCounter:        tokenCounter,
 		logger:              slog.Default(),
-		rateLimiter:         middleware.NewRateLimiter(100, time.Minute),
-		requestDedup:        middleware.NewRequestDeduplicator(500 * time.Millisecond),
+		rateLimiter:         middleware.NewRateLimiter(middleware.DefaultRateLimit, time.Minute),
+		requestDedup:        middleware.NewRequestDeduplicator(2 * time.Second),
 		requestIDGen:        middleware.NewRequestIDGenerator(),
 		metrics:             metrics,
 	}
@@ -108,7 +108,7 @@ func (h *MessagesHandler) HandleMessages(w http.ResponseWriter, r *http.Request)
 	if !h.rateLimiter.Allow(clientIP) {
 		h.metrics.RecordRateLimited()
 		h.logger.Warn("rate limited", "client", clientIP, "request_id", requestID)
-		http.Error(w, "rate limited", http.StatusTooManyRequests)
+		h.sendError(w, http.StatusTooManyRequests, "rate limited", nil)
 		return
 	}
 
@@ -119,12 +119,14 @@ func (h *MessagesHandler) HandleMessages(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	// Deduplicate - skip duplicate requests
+	// Deduplicate identical in-flight requests (Claude Code may retry quickly).
 	if _, ok := h.requestDedup.TryAcquire(rawBody); !ok {
 		h.metrics.RecordDeduplicated()
-		h.logger.Info("duplicate request skipped", "request_id", requestID)
+		h.logger.Info("duplicate request rejected", "request_id", requestID)
+		h.sendError(w, http.StatusConflict, "duplicate request already in progress", nil)
 		return
 	}
+	defer h.requestDedup.Release(rawBody)
 
 	// Parse into Anthropic request
 	var anthropicReq types.MessageRequest

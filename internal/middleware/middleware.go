@@ -8,10 +8,19 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"strings"
 	"sync"
 	"time"
+)
+
+const (
+	// DefaultRateLimit is the per-IP request budget for non-loopback clients.
+	DefaultRateLimit = 500
+	// LoopbackRateLimit is higher because Claude Code agents burst many parallel
+	// requests to the local proxy on 127.0.0.1.
+	LoopbackRateLimit = 2000
 )
 
 // RequestDeduplicator prevents duplicate requests from flooding the upstream.
@@ -93,10 +102,31 @@ type clientTokenBucket struct {
 	lastFill time.Time
 }
 
+// IsLoopbackIP reports whether the client address is a loopback interface.
+func IsLoopbackIP(clientIP string) bool {
+	host := clientIP
+	if h, _, err := net.SplitHostPort(clientIP); err == nil {
+		host = h
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
+}
+
+// rateLimitForClient returns the request budget for the given client address.
+func rateLimitForClient(clientIP string, defaultRate int) int {
+	if IsLoopbackIP(clientIP) {
+		return LoopbackRateLimit
+	}
+	if defaultRate <= 0 {
+		return DefaultRateLimit
+	}
+	return defaultRate
+}
+
 // NewRateLimiter creates a new rate limiter.
 func NewRateLimiter(rate int, window time.Duration) *RateLimiter {
 	if rate <= 0 {
-		rate = 100 // 100 requests per window
+		rate = DefaultRateLimit
 	}
 	if window == 0 {
 		window = time.Minute
@@ -112,6 +142,8 @@ func NewRateLimiter(rate int, window time.Duration) *RateLimiter {
 // Allow checks if a request from the given IP is allowed.
 // Returns true if allowed, false if rate limited.
 func (rl *RateLimiter) Allow(clientIP string) bool {
+	limit := rateLimitForClient(clientIP, rl.rate)
+
 	rl.mu.Lock()
 	defer rl.mu.Unlock()
 
@@ -120,7 +152,7 @@ func (rl *RateLimiter) Allow(clientIP string) bool {
 
 	if !exists {
 		rl.tokens[clientIP] = &clientTokenBucket{
-			tokens:   rl.rate - 1,
+			tokens:   limit - 1,
 			lastFill: now,
 		}
 		return true
@@ -129,7 +161,7 @@ func (rl *RateLimiter) Allow(clientIP string) bool {
 	// Refill tokens if window has passed
 	elapsed := now.Sub(bucket.lastFill)
 	if elapsed >= rl.window {
-		bucket.tokens = rl.rate
+		bucket.tokens = limit
 		bucket.lastFill = now
 	}
 

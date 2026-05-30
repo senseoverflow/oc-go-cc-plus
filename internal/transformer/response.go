@@ -160,6 +160,8 @@ func mapHTTPStatusToErrorType(statusCode int) string {
 		return "permission_error"
 	case statusCode == 404:
 		return "not_found_error"
+	case statusCode == 409:
+		return "invalid_request_error"
 	case statusCode == 429:
 		return "rate_limit_error"
 	case statusCode >= 500:
