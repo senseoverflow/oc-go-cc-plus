@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"oc-go-cc-plus/internal/config"
+	"oc-go-cc-plus/internal/models"
 )
 
 // ModelRouter handles model selection based on scenarios.
@@ -33,13 +34,17 @@ func (r *ModelRouter) resolveRequestedModel(cfg *config.Config, requestedModel s
 		return RouteResult{}, false
 	}
 
+	opencodeModel := models.NormalizeRequestedModel(requestedModel)
+
 	// Look up the requested model in config to inherit its settings
-	primary, ok := cfg.Models[requestedModel]
+	primary, ok := cfg.Models[opencodeModel]
 	if !ok {
-		// Unknown model — create a bare config and inherit defaults
-		primary = config.ModelConfig{
-			Provider: "opencode-go",
-			ModelID:  requestedModel,
+		if primary, ok = cfg.Models[requestedModel]; !ok {
+			// Unknown model — create a bare config and inherit defaults
+			primary = config.ModelConfig{
+				Provider: "opencode-go",
+				ModelID:  opencodeModel,
+			}
 		}
 		if def, ok := cfg.Models["default"]; ok {
 			primary.Temperature = def.Temperature

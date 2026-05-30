@@ -136,6 +136,20 @@ Variabili d'ambiente (con fallback a `OC_GO_CC_*` per compatibilità):
 
 ## Forzare un modello in Claude Code
 
+### Discovery automatica (`/model`)
+
+Il proxy espone `GET /v1/models` in formato Anthropic. Con:
+
+```bash
+export CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY=1
+```
+
+Claude Code (≥ 2.1.129) interroga il proxy all'avvio e aggiunge al picker `/model` i modelli configurati, etichettati **From gateway**.
+
+Gli ID esposti usano il prefisso `anthropic-opencode-` (richiesto dal filtro di Claude Code). Esempio: `anthropic-opencode-deepseek-v4-pro`. Il proxy traduce automaticamente verso l'ID OpenCode Go reale.
+
+### Alias tier (`/model sonnet|opus|haiku`)
+
 Con `respect_requested_model: true` (default nei preset):
 
 ```bash

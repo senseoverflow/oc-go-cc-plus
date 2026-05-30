@@ -232,3 +232,26 @@ func TestResolveRequestedModel_UsesFallbacks(t *testing.T) {
 		t.Errorf("expected first fallback qwen3.5-plus, got %s", result.Fallbacks[0].ModelID)
 	}
 }
+
+func TestRoute_RespectRequestedModel_GatewayPrefix(t *testing.T) {
+	cfg := &config.Config{
+		RespectRequestedModel: true,
+		Models: map[string]config.ModelConfig{
+			"deepseek-v4-pro": {
+				Provider:    "opencode-go",
+				ModelID:     "deepseek-v4-pro",
+				Temperature: 0.1,
+				MaxTokens:   8192,
+			},
+		},
+	}
+
+	router := NewModelRouter(newTestAtomicConfig(cfg))
+	result, err := router.Route(nil, 0, "anthropic-opencode-deepseek-v4-pro")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.Primary.ModelID != "deepseek-v4-pro" {
+		t.Fatalf("expected deepseek-v4-pro, got %s", result.Primary.ModelID)
+	}
+}
