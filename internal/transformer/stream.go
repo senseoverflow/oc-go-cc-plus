@@ -36,35 +36,47 @@ func NewStreamHandler() *StreamHandler {
 //
 // CRITICAL: This function reads directly from resp.Body without buffering to minimize latency.
 // Per deep research: "Don't use bufio.Scanner or bufio.Reader on the response body - it adds buffering"
-func (h *StreamHandler) ProxyStream(
-	w http.ResponseWriter,
-	openaiResp io.ReadCloser,
-	originalModel string,
-	clientCtx context.Context,
-) error {
+// WriteStreamPreamble sends message_start immediately so clients accept the SSE
+// connection while the upstream model is still processing a large prompt.
+func (h *StreamHandler) WriteStreamPreamble(w http.ResponseWriter, model string) error {
 	flusher, ok := w.(http.Flusher)
 	if !ok {
 		return fmt.Errorf("streaming not supported by response writer")
 	}
-
-	// Generate a unique message ID for this stream.
-	msgID := "msg_" + generateID()
-
-	// Send message_start event with the full message envelope.
 	msgStart := types.MessageEvent{
 		Type: "message_start",
 		Message: &types.MessageResponse{
-			ID:      msgID,
+			ID:      "msg_" + generateID(),
 			Type:    "message",
 			Role:    "assistant",
 			Content: []types.ContentBlock{},
-			Model:   originalModel,
+			Model:   model,
 		},
 	}
 	if err := writeSSEEvent(w, msgStart); err != nil {
 		return ErrClientDisconnected
 	}
 	flusher.Flush()
+	return nil
+}
+
+func (h *StreamHandler) ProxyStream(
+	w http.ResponseWriter,
+	openaiResp io.ReadCloser,
+	originalModel string,
+	clientCtx context.Context,
+	skipMessageStart bool,
+) error {
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		return fmt.Errorf("streaming not supported by response writer")
+	}
+
+	if !skipMessageStart {
+		if err := h.WriteStreamPreamble(w, originalModel); err != nil {
+			return err
+		}
+	}
 
 	// Read directly from response body without buffering.
 	// Use a tight loop with a line buffer - no bufio.Reader.

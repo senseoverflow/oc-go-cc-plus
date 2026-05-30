@@ -275,6 +275,19 @@ func (h *MessagesHandler) handleStreaming(
 		close(heartbeatDone)
 	}()
 
+	streamModel := anthropicReq.Model
+	if len(modelChain) > 0 && modelChain[0].ModelID != "" {
+		streamModel = modelChain[0].ModelID
+	}
+	// Valid Anthropic SSE before upstream prefill (85K+ tokens can take minutes).
+	if err := h.streamHandler.WriteStreamPreamble(rw, streamModel); err != nil {
+		if err == transformer.ErrClientDisconnected {
+			h.logger.Info("client disconnected before upstream")
+			return
+		}
+		h.logger.Warn("failed to write stream preamble", "error", err)
+	}
+
 	streamStart := time.Now()
 
 	for _, model := range modelChain {
@@ -336,7 +349,7 @@ func (h *MessagesHandler) handleStreaming(
 		}
 
 		// Proxy the stream: transform OpenAI SSE → Anthropic SSE in real-time
-		if err := h.streamHandler.ProxyStream(rw, streamBody, model.ModelID, clientCtx); err != nil {
+		if err := h.streamHandler.ProxyStream(rw, streamBody, model.ModelID, clientCtx, true); err != nil {
 			_ = streamBody.Close()
 			cancel()
 			if err == transformer.ErrClientDisconnected {
